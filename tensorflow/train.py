@@ -31,8 +31,8 @@ tf.flags.DEFINE_float("l2_reg_lambda", 9.0, "L2 regularizaion lambda (default: 0
 
 # Training parameters
 tf.flags.DEFINE_integer("batch_size", 50, "Batch Size (default: 64)")
-tf.flags.DEFINE_integer("num_epochs", 4, "Number of training epochs (default: 200)")
-tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model on dev set after this many steps (default: 100)")
+tf.flags.DEFINE_integer("num_epochs", 10, "Number of training epochs (default: 200)")
+tf.flags.DEFINE_integer("evaluate_every", 200, "Evaluate model on dev set after this many steps (default: 100)")
 tf.flags.DEFINE_integer("checkpoint_every", 500, "Save model after this many steps (default: 100)")
 # Misc Parameters
 tf.flags.DEFINE_boolean("allow_soft_placement", True, "Allow device soft device placement")
@@ -187,7 +187,6 @@ def train_net(cid, x_train, y_train, x_dev, y_dev):
             if current_step % FLAGS.checkpoint_every == 0:
                 path = saver.save(sess, checkpoint_prefix, global_step=current_step)
                 print("Saved model checkpoint to {}\n".format(path))
-
             if  batch_num % epoch_batch_size == 0:
                 print("\nEpoch{} Validation Evaluation:".format(epoch_num))
                 dev_step(cur_xdev, cur_ydev, writer=dev_summary_writer)
