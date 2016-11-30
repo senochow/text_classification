@@ -158,11 +158,11 @@ def write_event_keywords(dataset_dir, test_set, flag, filter_hs, cv, all_test_co
     print "prob_context \t",len(tmp_pred_prob)
     test_set_x = test_set[:, :-1]
     test_set_y = test_set[:, -1]
-    f_keywords = open(dataset_dir+"/event_keywords_"+str(flag)+"_"+str(cv)+".txt", "w")
+    f_keywords = open(dataset_dir+"/keywords/" + "keywords_" + "_"+str(cv)+".txt", "w")
     # tmp_test_conv_data: instance_cnt * feature_maps * conv_feature
     filter_num = len(filter_hs)
     for i in range(all_test_conv_data[0].shape[0]):
-        f_keywords.write(str(test_set_y[i]) + '\t' +str(tmp_pred_prob[i][1])+ "\t" + test_context[i].encode("utf8", 'ignore')+"\n")
+        f_keywords.write(str(int(test_set_y[i])) + '\t' +str(tmp_pred_prob[i][1])+ "\t" + test_context[i].encode("utf8", 'ignore')+"\n")
         #f_keywords.write(str(tmp_pred_prob[i][1])+ "\t" + test_context[i].encode("utf8", 'ignore')+"\n")
         # i : each instance
         for i_filter in range(filter_num):
