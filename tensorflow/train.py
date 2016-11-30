@@ -6,6 +6,7 @@ import os
 import time
 import datetime
 import data_helpers
+import utils
 from text_cnn import TextCNN
 from tensorflow.contrib import learn
 import sys
@@ -50,12 +51,14 @@ print("")
 
 # Load data
 print("Loading data...")
-x_text, y = data_helpers.load_data_and_labels(FLAGS.positive_data_file, FLAGS.negative_data_file)
+x_text, y = data_helpers.load_zhongwen_data(FLAGS.positive_data_file, FLAGS.negative_data_file)
 
 # Build vocabulary
 max_document_length = max([len(x.split(" ")) for x in x_text])
-vocab_processor = learn.preprocessing.VocabularyProcessor(max_document_length)
-x = np.array(list(vocab_processor.fit_transform(x_text)))
+print "max doc length", max_document_length
+vocab_processor = utils.VocabProcessor(x_text)
+x = np.array(vocab_processor.fit_transform())
+print("Vocabulary Size: {:d}".format(vocab_processor.get_vocab_size()))
 
 # Randomly shuffle data
 np.random.seed(10)
@@ -63,13 +66,7 @@ shuffle_indices = np.random.permutation(np.arange(len(y)))
 x_shuffled = x[shuffle_indices]
 y_shuffled = y[shuffle_indices]
 
-# Split train/test set
-# TODO: This is very crude, should use cross-validation
-#dev_sample_index = -1 * int(FLAGS.dev_sample_percentage * float(len(y)))
-#x_train, x_dev = x_shuffled[:dev_sample_index], x_shuffled[dev_sample_index:]
-#y_train, y_dev = y_shuffled[:dev_sample_index], y_shuffled[dev_sample_index:]
-initW = data_helpers.load_w2v_from_bin_file(FLAGS.word2vec, vocab_processor.vocabulary_)
-print("Vocabulary Size: {:d}".format(len(vocab_processor.vocabulary_)))
+initW = data_helpers.load_word_vectors(FLAGS.word2vec, vocab_processor.vocab)
 
 # Training
 # ==================================================
@@ -84,7 +81,7 @@ def train_net(cid, x_train, y_train, x_dev, y_dev):
             cnn = TextCNN(
                     sequence_length=x_train.shape[1],
                     num_classes=y_train.shape[1],
-                    vocab_size=len(vocab_processor.vocabulary_),
+                    vocab_size=vocab_processor.get_vocab_size(),
                     embedding_size=FLAGS.embedding_dim,
                     filter_sizes=list(map(int, FLAGS.filter_sizes.split(","))),
                     num_filters=FLAGS.num_filters,
@@ -154,9 +151,9 @@ def train_net(cid, x_train, y_train, x_dev, y_dev):
                     [train_op, global_step, train_summary_op, cnn.loss, cnn.accuracy],
                     feed_dict)
             time_str = datetime.datetime.now().isoformat()
-            #if step % FLAGS.evaluate_every == 0:
-            #    print("\n Training Evaluation:")
-            #    print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
+            if step % FLAGS.evaluate_every == 0:
+                print("\n Training Evaluation:")
+                print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
             train_summary_writer.add_summary(summaries, step)
 
         def dev_step(x_batch, y_batch, writer=None):
@@ -202,9 +199,8 @@ def train_net(cid, x_train, y_train, x_dev, y_dev):
         return cur_accuracy
 
 
-
 # Generate batches
-nfold=10
+nfold=5
 acc_list = []
 for i in range(nfold):
     cur_xtrain, cur_ytrain, cur_xdev, cur_ydev = data_helpers.make_cv_data(i, nfold, x_shuffled, y_shuffled)

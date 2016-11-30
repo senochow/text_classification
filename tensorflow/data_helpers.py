@@ -43,7 +43,20 @@ def load_data_and_labels(positive_data_file, negative_data_file):
     negative_labels = [[1, 0] for _ in negative_examples]
     y = np.concatenate([positive_labels, negative_labels], 0)
     return [x_text, y]
-
+def load_sentence(filename):
+    sents = []
+    with open(filename) as f:
+        for line in f:
+            sents.append(line.rstrip())
+    return sents
+def load_zhongwen_data(pos_file, neg_file):
+    positive_examples = load_sentence(pos_file)
+    negative_examples = load_sentence(neg_file)
+    x_text = positive_examples + negative_examples
+    positive_labels = [[0, 1] for _ in positive_examples]
+    negative_labels = [[1, 0] for _ in negative_examples]
+    y = np.concatenate([positive_labels, negative_labels], 0)
+    return [x_text, y]
 def make_cv_data(i, cv, x, y):
     size = len(y)
     fold_size = size/cv
@@ -79,6 +92,25 @@ def batch_iter(data, batch_size, num_epochs, shuffle=True):
             end_index = min((batch_num + 1) * batch_size, data_size)
             yield shuffled_data[start_index:end_index]
 
+def load_txt_vec(filename, vocab):
+    print("Load word2vec file from txt file{}\n".format(filename))
+    f = open(filename)
+    line = f.readline().rstrip()
+    vocab_size, layer1_size = line.split()
+    initW = np.random.uniform(-0.25,0.25,(len(vocab), int(layer1_size)))
+    exist_cnt = 0
+    while 1:
+        line = f.readline()
+        if not line:
+            break
+        line = line.rstrip()#.decode("utf8", 'ignore')
+        word, fea = line.split(' ', 1)
+        if word in vocab:
+            idx = vocab[word]
+            initW[idx] = np.fromstring(fea, dtype='float32', sep=' ')
+            exist_cnt += 1
+    print ("Exist in vocab words{}\n".format(exist_cnt))
+    return initW
 
 def load_w2v_from_bin_file(filename, vocab):
     print("Load word2vec file {}\n".format(filename))
@@ -103,3 +135,9 @@ def load_w2v_from_bin_file(filename, vocab):
                 f.read(binary_len)
     print("Load word2vec file {}\n".format(filename))
     return initW
+
+def load_word_vectors(filename, vocab, mode='txt'):
+    if mode == 'txt':
+        return load_txt_vec(filename, vocab)
+    elif mode == 'bin':
+        return load_w2v_from_bin_file(filename, vocab)
