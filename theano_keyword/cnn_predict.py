@@ -20,132 +20,10 @@ import sys
 import time
 import ConfigParser
 warnings.filterwarnings("ignore")
-
-#different non-linearities
-def ReLU(x):
-    y = T.maximum(0.0, x)
-    return(y)
-def Sigmoid(x):
-    y = T.nnet.sigmoid(x)
-    return(y)
-def Tanh(x):
-    y = T.tanh(x)
-    return(y)
-def Iden(x):
-    y = x
-    return(y)
-
-def cal_f1(pred_all, label):
-    pred = []
-    for pred_arr in pred_all:
-        if pred_arr[1] > 0.5:
-            pred.append(1)
-        else :
-            pred.append(0)
-    pos_ac, neg_ac = 0, 0
-    pos_pred_num, neg_pred_num = 0, 0
-    pos_num, neg_num = 0, 0
-    for i in range(len(pred)):
-        if pred[i] == 1:
-            pos_pred_num += 1
-        else:
-            neg_pred_num += 1
-        if label[i] == 1:
-            pos_num += 1
-            if label[i] == pred[i]:
-                pos_ac += 1
-        else:
-            neg_num += 1
-            if label[i] == pred[i]:
-                neg_ac += 1
-    pos_prec = float(pos_ac)/pos_pred_num
-    neg_prec = float(neg_ac)/neg_pred_num
-
-    pos_recall = float(pos_ac)/pos_num
-    neg_recall = float(neg_ac)/neg_num
-
-    print 'instance count : pos:' + str(pos_num) + '\t neg:' + str(neg_num)
-    print 'hit count : pos:'+str(pos_ac) + '\t neg:' + str(neg_ac)
-    print 'pos: precision: ' + str(pos_prec) + '\t recall:' + str(pos_recall)
-    print 'neg: precision: ' + str(neg_prec) + '\t recall:' + str(neg_recall)
-    print 'f1: ', 2*pos_prec*pos_recall/(pos_prec+pos_recall)
-    sys.stdout.flush()
-    #return float(pos_ac)/pos_num, float(neg_ac)/neg_num
-
-def cal_event_prob(test_set_y, tmp_pred_prob, test_event_id):
-    print 'cal event probability...'
-    event_pred_list = {}
-    event_label = {}
-    for i in range(len(test_set_y)):
-        index = test_event_id[i]
-        event_pred_list.setdefault(index,[])
-        event_pred_list[index].append(tmp_pred_prob[i][1])
-        event_label[index] = test_set_y[i]
-    event_pred = {}
-    for index, preds in event_pred_list.items():
-        pred_val = np.mean(preds)
-        event_pred[index] = pred_val
-    event_pred_label = {}
-    for index, pred_val in event_pred.items():
-        if pred_val > 0.5:
-            event_pred_label[index] = 1
-        else:
-            event_pred_label[index] = 0
-    print 'each event probability..'
-    print event_pred
-    avg_prec = cal_measure_info(event_label, event_pred_label)
-    return avg_prec
-
-def cal_event_mersure(test_set_y, tmp_pred_y, test_event_id):
-    m_pred = {}
-    event_label = {}
-    for i in range(len(test_set_y)):
-        index = test_event_id[i]
-        m_pred.setdefault(index, [0,0])
-        event_label[index] = test_set_y[i]
-        m_pred[index][tmp_pred_y[i]] += 1
-    # cal
-    print 'each event pred...'
-    print m_pred
-    event_pred = {}
-    for index, preds in m_pred.items():
-        if preds[0] > preds[1]:
-            event_pred[index] = 0
-        else:
-            event_pred[index] = 1
-    avg_prec = cal_measure_info(event_label, event_pred)
-    return avg_prec
-
-def cal_measure_info(event_label, event_pred):
-    p_hit ,n_hit = 0, 0
-    p_pred_num, n_pred_num = 0, 0
-    p_num , n_num = 0, 0
-    avg_prec = 0
-    for index, label in event_label.items():
-        pred_label = event_pred[index]
-        if label == pred_label:
-            avg_prec += 1
-        if label == 1:
-            p_num += 1
-            if label == pred_label:
-                p_hit += 1
-                p_pred_num += 1
-            else:
-                n_pred_num += 1
-        else:
-            n_num += 1
-            if label == pred_label:
-                n_hit += 1
-                n_pred_num += 1
-            else:
-                p_pred_num += 1
-    avg_prec = 1.0*avg_prec/len(event_label)
-    print 'hit count pos:%d, neg:%d'%(p_hit, n_hit)
-    print 'precision : pos: %f, neg: %f' % (1.0*p_hit/p_pred_num, 1.0*n_hit/n_pred_num)
-    print 'recall : pos: %f, neg: %f' % (1.0*p_hit/p_num, 1.0*n_hit/n_num)
-    print 'average accuracy : %f'% (avg_prec)
-    sys.stdout.flush()
-    return avg_prec
+from utils.evaluation import cal_f1_with_all_preds
+from utils.conv_net_classes import Iden
+from utils.cv_data_helper import *
+from utils.conv_net_classes import *
 
 def load_param(model_file):
     f = open(model_file, "rb")
@@ -225,6 +103,15 @@ def conv_net_predict(datasets,
     return conv_layers, classifier, Words, img_h
 
 def predict_with_cnn_model(test_dataset, conv_layers, classifier, Words, flag, img_h):
+    ''' 使用预定义的cnn模型进行预测
+    Args:
+        test_dataset: test data set
+        conv_layers: 初始化的卷积层
+        classifier: 初始化的分类器
+        Words: 词向量
+        flag:  是否用额外的feature
+        img_h: input的矩阵高度
+    '''
     x = T.matrix('x')
     y = T.ivector('y')
     # test data for predict
@@ -263,7 +150,6 @@ def predict_with_cnn_model(test_dataset, conv_layers, classifier, Words, flag, i
     start_time = time.time()
     tmp_pred_prob = test_model_prob(test_set_x)
     test_error_cnt = test_model_all(test_set_x,test_set_y)
-    #avg_precsion = cal_event_prob(test_set_y, tmp_pred_prob, test_event_id)
     tmp_all_test_conv_data = get_all_conv_data(test_set_x)
     return tmp_all_test_conv_data, tmp_pred_prob, test_error_cnt
 
@@ -298,56 +184,6 @@ def write_event_keywords(dataset_dir, test_set, flag, filter_hs, cv, all_test_co
             f_keywords.write("%d\t%s"%(max_index, str(dic))+"\n")
             f_keywords.write(' '.join([idx_word_map[index].encode("utf8", 'ignore') for index in test_set_x[i][keyphrase]])+"\n")
     f_keywords.close()
-
-
-
-def get_idx_from_sent(sent, word_idx_map, max_l=51, k=300, filter_h=5):
-    """
-    Transforms sentence into a list of indices. Pad with zeroes, (lastword+pad=filter_h).
-        sent = pad + sentence + pad , pad = filter_h-1
-    """
-    x = []
-    pad = filter_h - 1
-    for i in xrange(pad):
-        x.append(0)
-    words = sent.split()
-    for word in words:
-        if word in word_idx_map:
-            x.append(word_idx_map[word])
-    while len(x) < max_l+2*pad:
-        x.append(0)
-    return x
-
-def make_idx_data_cv(revs, word_idx_map, cv, max_l=51, k=300, filter_h=5):
-    """
-    Transforms sentences into a 2-d matrix.
-    """
-    train, test = [], []
-    test_mid = []
-    test_event_id = []
-    test_context = []
-    for rev in revs:
-        sent = get_idx_from_sent(rev["text"], word_idx_map, max_l, k, filter_h)
-        # add extra feature to sent fea, word_index(max_l) + extra_fea + y
-        extra_fea = [int(val) for val in rev["extra_fea"].split(",")]
-        sent += extra_fea
-        mid = rev["mid"]
-        # if the sententce if larger than max_l, then use the (0, max_l)
-        #if len(sent) > max_l:
-        #    sent = sent[:max_l]
-        sent.append(rev["y"])
-        if rev["split"]==cv:
-            test.append(sent)
-            test_event_id.append(rev["event_id"])
-            test_mid.append(mid)
-            test_context.append(rev["text"])
-        else:
-            train.append(sent)
-    train = np.array(train,dtype="int")
-    test = np.array(test,dtype="int")
-    print 'traing set :\t', len(train)
-    print 'testing set :\t', len(test)
-    return [train, test], test_event_id, test_mid, test_context
 
 
 if __name__=="__main__":
@@ -386,8 +222,8 @@ if __name__=="__main__":
     start_time = time.time()
     filter_hs =[3,4,5]
     for i in r:
-        datasets, test_event_id, test_mid, test_context = make_idx_data_cv(revs, word_idx_map, i, max_l=max_length,k=300, filter_h=5)
-        test_set_all = datasets[1]
+        cv_data = make_idx_data_cv(revs, word_idx_map, i, max_l=max_length,k=300, filter_h=5)
+        test_set_all = cv_data.test
         all_conv, all_prob, all_error_cnt = [[],[],[]], [], []
         conv_layers, classifier, Words, img_h = conv_net_predict(test_set_all,
                               dataset_dir,
@@ -404,8 +240,10 @@ if __name__=="__main__":
                               non_static=non_static,
                               batch_size=50,
                               dropout_rate=[0.5])
-        test_batch_cnt = 7000
+
+        test_batch_cnt = len(test_set_all)+1
         test_batch_size = len(test_set_all)/test_batch_cnt + 1
+        # Use full test data as one batch
         for index in range(test_batch_size):
             cur_test_data = test_set_all[index*test_batch_cnt: (index+1)*test_batch_cnt]
             tmp_conv, tmp_prob, tmp_error_cnt = predict_with_cnn_model(cur_test_data, conv_layers, classifier, Words, flag, img_h)
@@ -421,12 +259,9 @@ if __name__=="__main__":
         for k in range(len(all_conv)):
             merge_all_conv[k] = np.concatenate(all_conv[k])
         perf = 1-1.0*sum(all_error_cnt)/len(test_set_all)
-        print "cv: " + str(i) + ", perf: " + str(perf)
+        print ("cv: {} Accuracy: {}".format(i, perf))
         results.append(perf)
-        cal_f1(all_prob, test_set_all[:, -1])
-        #avg_plist.append(avg_precsion)
-        write_event_keywords(dataset_dir, test_set_all, flag,filter_hs, i, merge_all_conv, test_event_id, all_prob, test_context, idx_word_map)
-        #break
+        cal_f1_with_all_preds(all_prob, test_set_all[:, -1])
+        write_event_keywords(dataset_dir, test_set_all, flag,filter_hs, i, merge_all_conv, cv_data.test_event_id, all_prob, cv_data.test_context, idx_word_map)
     print 'total time : %.2f minutes' % ((time.time()-start_time)/60)
-    print str(np.mean(results))
-    #print 'all avg precision : prec: %f' % (np.mean(avg_plist))
+    print ("Cross-validation average results: {}".format(np.mean(results)))
