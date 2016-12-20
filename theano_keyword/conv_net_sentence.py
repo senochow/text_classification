@@ -20,6 +20,7 @@ from utils.evaluation import cal_f1_score
 from utils.conv_net_classes import Iden
 from utils.learning import shared_dataset
 from utils.learning import sgd_updates_adadelta
+from utils.evaluation import cal_f1_with_all_preds
 from utils.cv_data_helper import *
 from utils.conv_net_classes import *
 
@@ -109,14 +110,18 @@ def train_conv_net(cv_data, data_dir, cv, U, model_param, activations=[Iden]):
 
     # 2. model run part ...
     train_set_x, train_set_y, val_set_x, val_set_y, n_train_batches, n_val_batches = gen_train_validation(cv_data.train, batch_size)
-    test_set_x, test_set_y, test_set_remand_x, test_set_remand_y, test_size_remand, n_test_batches, test_size_batch = gen_test_batch_data(cv_data.test, batch_size)
-    test_size_all = cv_data.test.shape[0]
-
+    #test_set_x, test_set_y, test_set_remand_x, test_set_remand_y, test_size_remand, n_test_batches, test_size_batch = gen_test_batch_data(cv_data.test, batch_size)
+    #test_size_all = cv_data.test.shape[0]
+    test_set_x = cv_data.test[:, :img_h]
+    test_set_y = np.asarray(cv_data.test[:,-1],"int32")
+    test_size = test_set_x.shape[0]
     # 3. compile theano functions to get train/val/test errors
+    '''
     test_model_batch = theano.function([index], classifier.errors(y),
              givens={
                 x: test_set_x[index * batch_size: (index + 1) * batch_size],
                 y: test_set_y[index * batch_size: (index + 1) * batch_size]}, allow_input_downcast=True)
+    '''
     test_model = theano.function([index], classifier.errors(y),
              givens={
                 x: train_set_x[index * batch_size: (index + 1) * batch_size],
@@ -131,14 +136,15 @@ def train_conv_net(cv_data, data_dir, cv, U, model_param, activations=[Iden]):
             y: val_set_y[index * batch_size: (index + 1) * batch_size]}, allow_input_downcast=True)
     # 4. run theano models
     test_pred_layers = []
-    test_layer0_input = Words[T.cast(x[:, :img_h].flatten(),dtype="int32")].reshape((test_size_batch,1,img_h,Words.shape[1]))
+    test_layer0_input = Words[T.cast(x.flatten(),dtype="int32")].reshape((test_size,1,img_h,Words.shape[1]))
+    #test_layer0_input = Words[T.cast(x[:, :img_h].flatten(),dtype="int32")].reshape((test_size_batch,1,img_h,Words.shape[1]))
     test_layer1_input_extra_fea = x[:,img_h:]
 
     # [(instances * feature_maps * conv_feature)], different filter size have different conv dimention
     test_conv_data = []
     for conv_layer in conv_layers:
-        test_layer0_output = conv_layer.predict(test_layer0_input, test_size_remand)
-        test_layer0_convs = conv_layer.predict_maxpool(test_layer0_input, test_size_remand)
+        test_layer0_output = conv_layer.predict(test_layer0_input, test_size)
+        test_layer0_convs = conv_layer.predict_maxpool(test_layer0_input, test_size)
         test_pred_layers.append(test_layer0_output.flatten(2))
         test_conv_data.append(test_layer0_convs.flatten(3))
     # conv data
@@ -149,7 +155,8 @@ def train_conv_net(cv_data, data_dir, cv, U, model_param, activations=[Iden]):
     test_y_pred = classifier.predict(test_layer1_input)
     test_y_pred_p = classifier.predict_p(test_layer1_input)
     test_error1 = T.neq(test_y_pred, y)
-    test_model_all = theano.function([x,y], test_error1, allow_input_downcast=True)
+    test_error = T.mean(T.neq(test_y_pred, y))
+    test_model_all = theano.function([x,y], test_error, allow_input_downcast=True)
     test_model_f1 = theano.function([x], test_y_pred_p, allow_input_downcast=True)
     test_model_prob = theano.function([x], test_y_pred_p, allow_input_downcast=True)
     test_layer1_feature = theano.function([x], test_layer1_input, allow_input_downcast=True)
@@ -160,7 +167,7 @@ def train_conv_net(cv_data, data_dir, cv, U, model_param, activations=[Iden]):
     epoch = 0
     best_val_perf = 0
     val_perf = 0
-    test_perf = 0
+    test_perf, tmp_pred_prob = 0, 0
     cost_epoch = 0
     fp = 0
     avg_precsion = 0
@@ -195,9 +202,9 @@ def train_conv_net(cv_data, data_dir, cv, U, model_param, activations=[Iden]):
         print 'cur test loss: ', fp
         '''
         #test_losses = [test_model_batch(i) for i in xrange(n_test_batches)]
-        test_loss = test_model_all(test_set_x,test_set_y)
-        test_perf = 1- test_loss
-        print 'cur test loss: ', test_perf
+        #test_loss = test_model_all(test_set_x,test_set_y)
+        #test_perf = 1- test_loss
+        #print 'cur test loss: ', test_perf
         if epoch == n_epochs+1:
             tmp_pred_prob = test_model_prob(test_set_x)
             test_losses = [test_model_batch(i) for i in xrange(n_test_batches)]
@@ -207,7 +214,9 @@ def train_conv_net(cv_data, data_dir, cv, U, model_param, activations=[Iden]):
             cal_f1_score(tmp_pred_prob, test_set_y)
         if val_perf >= best_val_perf:
             best_val_perf = val_perf
-            test_perf = fp
+            test_loss = test_model_all(test_set_x,test_set_y)
+            test_perf = 1- test_loss
+            tmp_pred_prob = test_model_prob(test_set_x)
             # save params
             write_file = open(param_file, 'wb')
             pk.dump(classifier.params, write_file, -1)
@@ -215,7 +224,7 @@ def train_conv_net(cv_data, data_dir, cv, U, model_param, activations=[Iden]):
                 pk.dump(conv_layer.params, write_file, -1)
             write_file.close()
 
-    return test_perf, fp, avg_precsion
+    return test_perf, fp, avg_precsion, tmp_pred_prob
 
 def get_model_param(cf_pair, flag):
     '''Set model parameter, some params load from config file and some set here
@@ -264,8 +273,9 @@ def train_cross_validation(n, data, data_dir, word_idx_map, max_length, U, model
     start_time = time.time()
     for i in range(0, n):
         cv_data = make_idx_data_cv(data, word_idx_map, i, max_l=max_length ,k=model_param['word_dim'], filter_h=model_param['max_filter_h'])
-        perf, fp, avg_precsion = train_conv_net(cv_data, data_dir, i, U, model_param)
+        perf, fp, avg_precsion, probs = train_conv_net(cv_data, data_dir, i, U, model_param)
         print ("CV-{} perf: {}".format(i, perf))
+        cal_f1_with_all_preds(probs, np.asarray(cv_data.test[:,-1],"int32"))
         all_perf.append(perf)
         fres.append(fp)
         avg_plist.append(avg_precsion)
