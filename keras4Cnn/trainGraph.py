@@ -42,9 +42,11 @@ instead of MaxPooling over whole feature map as in the article
 import numpy as np
 import data_helpers
 from w2v import train_word2vec
-from cnn_model import CNNModel4Text
+from text_model import CNNModel4Text
+from text_model import CNNWithKeywordLayer
 from keras.models import Sequential, Model
 from keras.layers import Activation, Dense, Dropout, Embedding, Flatten, Input, Merge, Convolution1D, MaxPooling1D
+import keras.backend.tensorflow_backend as K
 np.random.seed(2)
 
 # Parameters
@@ -53,20 +55,20 @@ np.random.seed(2)
 # Model Variations. See Kim Yoon's Convolutional Neural Networks for
 # Sentence Classification, Section 3 for detail.
 
-model_variation = 'CNN-non-static'  #  CNN-rand | CNN-non-static | CNN-static
+model_variation = 'CNN-rand'  #  CNN-rand | CNN-non-static | CNN-static
 print('Model variation is %s' % model_variation)
 
 # Model Hyperparameters
 sequence_length = 56
 embedding_dim = 20
 filter_sizes = (3, 4, 5)
-num_filters = 3
-dropout_prob = (0.7, 0.8)
-hidden_dims = 100
+num_filters = 100
+dropout_prob = (0.25, 0.5)
+hidden_dims = 150
 
 # Training parameters
 batch_size =32
-num_epochs = 70
+num_epochs = 20
 val_split = 0.1
 
 # Word2Vec parameters, see train_word2vec
@@ -106,7 +108,8 @@ print("Vocabulary Size: {:d}".format(vocab_size))
 # ==================================================
 #
 # graph subnet with one input and one output,
-model = CNNModel4Text(embedding_weights, vocab_size, sequence_length, filter_sizes, num_filters, dropout_prob, hidden_dims, model_variation, embedding_dim)
+#model = CNNModel4Text(embedding_weights, vocab_size, sequence_length, filter_sizes, num_filters, dropout_prob, hidden_dims, model_variation, embedding_dim)
+model = CNNWithKeywordLayer(embedding_weights, vocab_size, sequence_length, filter_sizes, num_filters, dropout_prob, hidden_dims, model_variation, embedding_dim)
 # ==================================================
-model.fit(X_train, y_train, batch_size=batch_size,
-          nb_epoch=num_epochs, validation_data=(X_valid, y_valid), verbose=1)
+model.fit([x_shuffled, x_shuffled], y_shuffled, batch_size=batch_size,
+          nb_epoch=num_epochs, validation_split=val_split, verbose=1)
