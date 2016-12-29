@@ -12,7 +12,7 @@ File:    train_zhihu.py
 """
 import sys
 import numpy as np
-from text_model_ori import CNNWithKeywordLayer, CNNModel4Text, LSTMLayer, QuestionWithAnswersModel
+from text_model import CNNWithKeywordLayer, CNNModel4Text, LSTMLayer, QuestionWithAnswersModel
 import keras.backend.tensorflow_backend as K
 from keras.models import Sequential, Model
 from data_preprocess import load_zhihu_data
@@ -70,9 +70,8 @@ def train_cross_validation(k, l, r, data, max_words_cnt, max_keywords_cnt, embed
 
         #model = CNNModel4Text(embedding_weights, embed_input, max_words_cnt, filter_sizes, num_filters,dropout_prob, hidden_dims, model_variation,embed_dim)
         #model = CNNModel4Text(embedding_weights, embed_input, max_keywords_cnt, filter_sizes, num_filters,dropout_prob, hidden_dims, model_variation,embed_dim)
-        with K.tf.device('/gpu:1'):
-            model = CNNWithKeywordLayer(embedding_weights, embed_input, max_words_cnt,max_keywords_cnt, filter_sizes, num_filters, dropout_prob, hidden_dims, model_variation, embed_dim)
-            model.fit(x_train, y_train, batch_size=batch_size,nb_epoch=num_epochs, validation_data=(x_test, y_test), verbose=1)
+        model = CNNWithKeywordLayer(embedding_weights, embed_input, max_words_cnt,max_keywords_cnt, filter_sizes, num_filters, dropout_prob, hidden_dims, model_variation, embed_dim)
+        model.fit(x_train, y_train, batch_size=batch_size,nb_epoch=num_epochs, validation_data=(x_test, y_test), verbose=1)
 
         #model.fit(x_train, y_train, batch_size=batch_size,nb_epoch=num_epochs, validation_split=0.1, verbose=1)
         #model = CNNModel4Text(embedding_weights, embed_input, max_words_cnt, filter_sizes, num_filters,dropout_prob, hidden_dims, model_variation,embed_dim)
@@ -80,7 +79,7 @@ def train_cross_validation(k, l, r, data, max_words_cnt, max_keywords_cnt, embed
 
         #model = LSTMLayer(embedding_weights, embed_input, max_keywords_cnt, filter_sizes, num_filters,dropout_prob, hidden_dims, model_variation,embed_dim)
         #model.fit(x_train[1], y_train, batch_size=batch_size,nb_epoch=num_epochs, validation_data=(x_test[1], y_test), verbose=1)
-            acc = model.evaluate(x_test, y_test)
+        acc = model.evaluate(x_test, y_test)
         print acc
         total_acc.append(acc[1])
     print "averge accuracy :", np.mean(total_acc)

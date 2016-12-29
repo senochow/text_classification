@@ -13,7 +13,7 @@ File:    text_model.py
 """
 import sys
 from keras.models import Sequential, Model
-from keras.layers import Activation, Dense, Dropout, Embedding, Flatten, Input, merge, Convolution1D, AveragePooling1D, MaxPooling1D
+from keras.layers import Activation, Dense, Dropout, Embedding, Flatten, Input, Merge, Convolution1D, AveragePooling1D, MaxPooling1D,GlobalAveragePooling1D,GlobalMaxPooling1D
 from keras.layers.wrappers import TimeDistributed
 from keras.layers.advanced_activations import LeakyReLU
 from keras.regularizers import l2
@@ -22,10 +22,10 @@ from keras.optimizers import *
 from keras.layers.wrappers import TimeDistributed
 from keras.layers import LSTM, GRU, Bidirectional
 from keras.layers.normalization import BatchNormalization
-from keras import backend as K
 from AttentionLayer import AttentionLayer
+from hierarchical_layers import HierarchicalRNN
 
-def TextCNN(graph_in, sequence_length, embedding_dim, filter_sizes, num_filters):
+def TextCNN(sequence_length, embedding_dim, filter_sizes, num_filters):
     ''' Convolutional Neural Network, including conv + pooling
 
     Args:
@@ -37,6 +37,7 @@ def TextCNN(graph_in, sequence_length, embedding_dim, filter_sizes, num_filters)
     Returns:
         features extracted by CNN
     '''
+    graph_in = Input(shape=(sequence_length, embedding_dim))
     convs = []
     for fsz in filter_sizes:
         conv = Convolution1D(nb_filter=num_filters,
@@ -48,44 +49,31 @@ def TextCNN(graph_in, sequence_length, embedding_dim, filter_sizes, num_filters)
         flatten = Flatten()(pool)
         convs.append(flatten)
     if len(filter_sizes)>1:
-        out = merge(convs, mode='concat')#(convs)
+        out = Merge(mode='concat')(convs)
     else:
         out = convs[0]
-    #graph = Model(input=graph_in, output=out)
-    return out
+    graph = Model(input=graph_in, output=out)
+    return graph
 
-def LSTMLayer(graph_in, embed_matrix, embed_input, sequence_length, dropout_prob, hidden_dims, embedding_dim=300, lstm_dim=100):
-    #model.add(Bidirectional(GRU(100)))
-    #model.add(GRU(50))
-    #'''
-    lstm = Bidirectional(GRU(lstm_dim, return_sequences=True))(graph_in)
-    bi_lstm_out = AttentionLayer(lstm_dim)(lstm)
-    bi_lstm_dense = TimeDistributed(Dense(1))(bi_lstm_out)
-    bi_lstm_avg = AveragePooling1D()(bi_lstm_dense)
-    bi_lstm_flatten = Flatten()(bi_lstm_avg)
-    #model.add(Bidirectional(GRU(lstm_dim, return_sequences=True)))
+def LSTMLayer(embed_matrix, embed_input, sequence_length, dropout_prob, hidden_dims, embedding_dim=300, lstm_dim=100):
+    model = Sequential()
+    model.add(Embedding(embed_input, embedding_dim, input_length=sequence_length, weights=[embed_matrix]))
+    model.add(Bidirectional(GRU(lstm_dim, return_sequences=True)))
+    #model.add(AttentionLayer(2*lstm_dim))
     #model.add(TimeDistributed(Dense(1)))
     #model.add(AveragePooling1D())
     #model.add(Flatten())
-    #'''
-    #model.add(Dense(hidden_dims))
-    #model.add(Dropout(dropout_prob[1]))
-    #model.add(Dense(hidden_dims, activation='relu'))
-    #model.add(Dropout(dropout_prob[1]))
-    #model.add(Activation('relu'))
-    #model.add(Dense(1, activation='sigmoid'))
-    #model.compile(loss='binary_crossentropy', optimizer='RMSprop', metrics=['accuracy'])
-    return bi_lstm_flatten
+    model.add(GlobalMaxPooling1D())
+    return model
 
 
-def KeywordLayer(graph_in, sequence_length, embed_input, embedding_dim, embed_matrix):
-    merge_keywords = AveragePooling1D()(graph_in)
-    flatten = Flatten()(merge_keywords)
-    #graph = Model(input=graph_in, output=flatten)
-    #model.add(Embedding(embed_input, embedding_dim, input_length=sequence_length, weights=[embed_matrix]))
+def KeywordLayer(sequence_length, embed_input, embedding_dim, embed_matrix):
+    model = Sequential()
+    model.add(Embedding(embed_input, embedding_dim, input_length=sequence_length, weights=[embed_matrix]))
     #model.add(AveragePooling1D())
     #model.add(Flatten())
-    return flatten
+    model.add(GlobalMaxPooling1D())
+    return model
 
 def CNNModel4Text(embed_matrix, embed_input, sequence_length, filter_sizes, num_filters, dropout_prob, hidden_dims, model_variation, embedding_dim=300):
     '''CNN model for text classification
@@ -120,33 +108,51 @@ def CNNWithKeywordLayer(embed_matrix, embed_input, sequence_length, keywords_len
 
     '''
     embed1 = Embedding(embed_input, embedding_dim,input_length=sequence_length, weights=[embed_matrix])
-    embed2 = Embedding(embed_input, embedding_dim,input_length=keywords_length, weights=[embed_matrix])
-
     # 1. question model part
-    left_input = Input(shape=(sequence_length,))
-    left_embed = embed1(left_input)
-    right_input = Input(shape=(keywords_length,))
-    right_embed = embed2(right_input)
-
-    #question_branch = Sequential()
-    left_branch = TextCNN(left_embed, sequence_length, embedding_dim, filter_sizes, num_filters)
-    #question_branch.add(cnn_model)
+    #left_input = Input(shape=(sequence_length, embedding_dim))
+    question_branch = Sequential()
+    cnn_model = TextCNN(sequence_length, embedding_dim, filter_sizes, num_filters)
+    question_branch.add(embed1)
     #question_branch.add(Embedding(embed_input, embedding_dim, input_length=sequence_length, weights=[embed_matrix]))
     #question_branch.add(Dropout(dropout_prob[0], input_shape=(sequence_length, embedding_dim)))
 
+    question_branch.add(cnn_model)
     # 2. keyword model part
-    #keyword_branch = Sequential()
-    #right_branch = KeywordLayer(right_embed, keywords_length, embed_input, embedding_dim, embed_matrix)
-
+    #keyword_branch = KeywordLayer(keywords_length, embed_input, embedding_dim, embed_matrix)
     keyword_branch = LSTMLayer(embed_matrix, embed_input, keywords_length, dropout_prob, hidden_dims, embedding_dim)
-    #keyword_branch.add(keyword_model)
     # 3. merge layer
-    merged = merge([left_branch, right_branch], mode='concat')
-    x = Dense(hidden_dims, activation='relu', W_constraint = maxnorm(3))(merged)
-    x = Dropout(0.5)(x)
-    final_out = Dense(1, activation='sigmoid')(x)
-    final_model = Model(input=[left_input, right_input], output=final_out)
+    merged = Merge([question_branch, keyword_branch], mode='concat')
+    final_model = Sequential()
+    final_model.add(merged)
+    final_model.add(Dense(hidden_dims, W_constraint = maxnorm(3)))
+    final_model.add(Dropout(0.5))
+    final_model.add(Activation('relu'))
+    final_model.add(Dense(1))
+    final_model.add(Activation('sigmoid'))
+    #sgd = SGD(lr=0.01, momentum=0.9)
     final_model.compile(loss='binary_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
     return final_model
+def QuestionWithAnswersModel(embed_matrix, embed_input, sequence_length, keywords_length, filter_sizes, num_filters, dropout_prob, hidden_dims, model_variation, embedding_dim=300):
+    ''' path1: question embedding (CNN model)
+        path2: answer embeddin(Hierachical RNN model)
+        merge
+    '''
+    # path 1
+    embed1 = Embedding(embed_input, embedding_dim,input_length=sequence_length, weights=[embed_matrix])
+    question_branch = Sequential()
+    cnn_model = TextCNN(sequence_length, embedding_dim, filter_sizes, num_filters)
+    question_branch.add(embed1)
+    question_branch.add(cnn_model)
+    # path 2
+    answer_branch = HierarchicalRNN(embed_matrix, embed_input, sequence_length, embedding_dim)
+    merged = Merge([question_branch, answer_branch], mode='concat')
+    final_model = Sequential()
+    final_model.add(merged)
+    final_model.add(Dense(hidden_dims, W_constraint = maxnorm(3)))
+    final_model.add(Dropout(0.5))
+    final_model.add(Activation('relu'))
+    final_model.add(Dense(1))
+    final_model.add(Activation('sigmoid'))
+    final_model.compile(loss='binary_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
 
 # vim: set expandtab ts=4 sw=4 sts=4 tw=100:
