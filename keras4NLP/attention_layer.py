@@ -8,12 +8,11 @@ Brief:
 
 Authors: zhouxing(@ict.ac.cn)
 Date:    2016/09/12 19:11:14
-File:    AttentionLayer.py
+File:    attention_layer.py
 """
 from keras import backend as K
 from keras.engine.topology import Layer
 from keras.layers import activations, initializations, RepeatVector
-import tensorflow as tf
 
 class AttentionLayer(Layer):
     '''Attention Layer over LSTM
@@ -28,6 +27,7 @@ class AttentionLayer(Layer):
     def build(self, input_shape): # (batch, steps, dim)
         input_dim = input_shape[2]
         self.steps = input_shape[1]
+        print input_shape
         self.W_s = self.add_weight(shape=(input_dim, self.output_dim),
                 initializer=self.init,
                 name='{}_Ws'.format(self.name),
@@ -36,7 +36,7 @@ class AttentionLayer(Layer):
                 initializer='zero',
                 name='{}_bs'.format(self.name))
         self.Attention_vec = self.add_weight((self.output_dim,),
-                initializer=self.init,
+                initializer='normal',
                 name='{}_att_vec'.format(self.name))
         self.built = True
     def call(self, x, mask=None):
@@ -53,12 +53,12 @@ class AttentionLayer(Layer):
         # 4. weighted sum
         att = att.dimshuffle(0, 1, 'x')
         #att = K.expand_dims(att, 2)
-        va = x*att
+        va = att*x
         v = K.sum(va, axis=1)
         return v
 
     def get_output_shape_for(self, input_shape):
-        return (input_shape[0], self.output_dim)
+        return (input_shape[0], input_shape[2])
 
 
 # vim: set expandtab ts=4 sw=4 sts=4 tw=100:

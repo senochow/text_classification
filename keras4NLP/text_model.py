@@ -22,8 +22,9 @@ from keras.optimizers import *
 from keras.layers.wrappers import TimeDistributed
 from keras.layers import LSTM, GRU, Bidirectional
 from keras.layers.normalization import BatchNormalization
-from AttentionLayer import AttentionLayer
+from attention_layer import AttentionLayer
 from hierarchical_layers import HierarchicalRNN
+from my_recurrent import MGU
 
 def TextCNN(sequence_length, embedding_dim, filter_sizes, num_filters):
     ''' Convolutional Neural Network, including conv + pooling
@@ -58,9 +59,16 @@ def TextCNN(sequence_length, embedding_dim, filter_sizes, num_filters):
 def LSTMLayer(embed_matrix, embed_input, sequence_length, dropout_prob, hidden_dims, embedding_dim=300, lstm_dim=100):
     model = Sequential()
     model.add(Embedding(embed_input, embedding_dim, input_length=sequence_length, weights=[embed_matrix]))
-    model.add(Bidirectional(GRU(lstm_dim, return_sequences=True)))
-    #model.add(AttentionLayer(2*lstm_dim))
+    model.add(Bidirectional(MGU(lstm_dim, return_sequences=True)))
+    #model.add(AttentionLayer(lstm_dim))
     model.add(GlobalMaxPooling1D())
+    # 3. Hidden Layer
+    model.add(Dense(hidden_dims))
+    model.add(Dropout(dropout_prob[1]))
+    model.add(Activation('relu'))
+    model.add(Dense(1))
+    model.add(Activation('sigmoid'))
+    model.compile(loss='binary_crossentropy', optimizer='RMSprop', metrics=['accuracy'])
     return model
 
 
